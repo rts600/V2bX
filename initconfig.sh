@@ -106,7 +106,7 @@ add_node_config() {
             "Timeout": 30,
             "ListenIP": "0.0.0.0",
             "SendIP": "0.0.0.0",
-            "DeviceOnlineMinTraffic": 100,
+            "DeviceOnlineMinTraffic": 1000,
             "EnableProxyProtocol": false,
             "EnableUot": true,
             "EnableTFO": true,
@@ -137,7 +137,7 @@ EOF
             "Timeout": 30,
             "ListenIP": "$listen_ip",
             "SendIP": "0.0.0.0",
-            "DeviceOnlineMinTraffic": 100,
+            "DeviceOnlineMinTraffic": 1000,
             "TCPFastOpen": true,
             "SniffEnabled": true,
             "EnableDNS": true,
@@ -164,10 +164,11 @@ EOF
             "ApiKey": "$ApiKey",
             "NodeID": $NodeID,
             "NodeType": "$NodeType",
+            "Hysteria2ConfigPath": "/etc/V2bX/hy2config.yaml",
             "Timeout": 30,
             "ListenIP": "",
             "SendIP": "0.0.0.0",
-            "DeviceOnlineMinTraffic": 100,
+            "DeviceOnlineMinTraffic": 1000,
             "CertConfig": {
                 "CertMode": "$certmode",
                 "RejectUnknownSni": false,
@@ -419,26 +420,20 @@ EOF
   "route": {
     "rules": [
       {
-        "outbound": "block",
-        "geoip": [
-          "private"
-        ]
+        "ip_is_private": true,
+        "outbound": "block"
       },
       {
-        "geosite": [
-          "google"
+        "rule_set": [
+          "geosite-google"
         ],
         "outbound": "direct"
       },
       {
-        "geosite": [
-          "cn"
-        ],
-        "outbound": "block"
-      },
-      {
-        "geoip": [
-          "cn"
+        "rule_set": [
+          "geosite-category-ads-all",
+          "geosite-cn",
+          "geoip-cn"
         ],
         "outbound": "block"
       },
@@ -475,11 +470,69 @@ EOF
           "udp","tcp"
         ]
       }
+    ],
+    "rule_set": [
+      {
+        "tag": "geoip-cn",
+        "type": "remote",
+        "format": "binary",
+        "url": "https://raw.githubusercontent.com/SagerNet/sing-geoip/rule-set/geoip-cn.srs",
+        "download_detour": "direct"
+      },
+      {
+        "tag": "geosite-cn",
+        "type": "remote",
+        "format": "binary",
+        "url": "https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-cn.srs",
+        "download_detour": "direct"
+      },
+      {
+        "tag": "geosite-category-ads-all",
+        "type": "remote",
+        "format": "binary",
+        "url": "https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-category-ads-all.srs",
+        "download_detour": "direct"
+      },
+      {
+        "tag": "geosite-google",
+        "type": "remote",
+        "format": "binary",
+        "url": "https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-google.srs",
+        "download_detour": "direct"
+      }
     ]
+  },
+  "experimental": {
+    "cache_file": {
+      "enabled": true
+    }
   }
 }
 EOF
 
+    # 创建 hy2config.yaml 文件           
+    cat <<EOF > /etc/V2bX/hy2config.yaml
+quic:
+  initStreamReceiveWindow: 8388608
+  maxStreamReceiveWindow: 8388608
+  initConnReceiveWindow: 20971520
+  maxConnReceiveWindow: 20971520
+  maxIdleTimeout: 30s
+  maxIncomingStreams: 1024
+  disablePathMTUDiscovery: false
+ignoreClientBandwidth: false
+disableUDP: false
+udpIdleTimeout: 60s
+resolver:
+  type: system
+acl:
+  inline:
+    - direct(geosite:google)
+    - reject(geosite:cn)
+    - reject(geoip:cn)
+masquerade:
+  type: 404
+EOF
     echo -e "${green}V2bX 配置文件生成完成,正在重新启动服务${plain}"
     v2bx restart
 }
